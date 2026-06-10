@@ -1,0 +1,36 @@
+MockSignal
+Copyright (c) 2026 Zachary Cancio
+
+This product is licensed under the MIT License (see LICENSE).
+
+The MIT License covers the original work in this repository: the application
+(backend and frontend), the test harness, and the practice problems authored
+for MockSignal.
+
+------------------------------------------------------------------------------
+Third-party content
+------------------------------------------------------------------------------
+
+The following practice problems are imported from other projects and remain
+the property of their respective authors. They are NOT covered by the MIT
+License above and are included here under their original terms:
+
+  problems/bank_system/         imported from LibreSignal
+                                https://github.com/EricZheng0404/LibreSignal
+
+  problems/in_memory_database/  imported from LibreSignal
+                                https://github.com/EricZheng0404/LibreSignal
+
+LibreSignal is published without a license. These imported problems are
+included for personal, educational practice use, with attribution in each
+problem's description. If you are the original author and would like them
+removed or relicensed, please open an issue.
+
+------------------------------------------------------------------------------
+Trademark
+------------------------------------------------------------------------------
+
+MockSignal is an independent practice tool and is not affiliated with,
+endorsed by, or connected to CodeSignal, Inc. "CodeSignal" is a trademark of
+its respective owner and is used here only to describe the assessment format
+this tool emulates.
