@@ -20,6 +20,13 @@ function Svg({ children }) {
 }
 
 const ICONS = {
+  copilot: (
+    <Svg>
+      <path d="M12 3a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3h1V6a3 3 0 0 1 3-3z" />
+      <path d="M9.5 13v1.5M14.5 13v1.5" />
+      <path d="M12 3V1.5" />
+    </Svg>
+  ),
   desc: (
     <Svg>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -64,6 +71,7 @@ const ICONS = {
 }
 
 const SECTIONS = [
+  { id: 'copilot', label: 'Copilot' },
   { id: 'desc', label: 'Desc' },
   { id: 'history', label: 'History' },
   { id: 'rules', label: 'Rules' },

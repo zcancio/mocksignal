@@ -19,6 +19,16 @@ pip install -r requirements.txt
 cd frontend && npm install && cd ..
 ```
 
+The **Copilot** drives your local **Claude Code** CLI instead of an API key, so
+install `claude` and sign in once:
+
+```bash
+claude          # run once and sign in (reused by the copilot — no API key needed)
+which claude    # must be on the PATH of the shell that starts the backend
+```
+
+Everything except the copilot works without it; see [Copilot](#copilot) for details.
+
 ## Run
 
 Two processes, two terminals:
@@ -89,6 +99,33 @@ level and to gate progression. `tests.py` imports the solution as
   problem's `.backups/` directory (throttled; the 80 most-recent are kept).
   The bottom-bar **Backups** menu lists them and restores any one — and
   snapshots the current file first, so a restore is itself reversible.
+
+## Copilot
+
+The **Copilot** tab in the left rail opens Mio — an in-app pair programmer
+backed by Claude. It sees the current problem and active level, the **contents
+of every open editor tab**, the **workspace file list**, and your recent
+**terminal history**, so you can ask for a hint, talk through an approach, or
+debug a failing run. If you reference a file you haven't opened, it asks you to
+open it (in the Files panel) rather than guessing. Code it writes has a **Copy**
+button. Chat history persists while you switch between the left-rail panels;
+**New chat** clears it.
+
+Because MockSignal only runs locally, the copilot drives your local **Claude
+Code** install rather than asking for an API key — the backend shells out to the
+`claude` CLI and reuses whatever login Claude Code already has. So make sure:
+
+```bash
+claude          # run once and sign in, if you haven't already
+which claude    # must be on the PATH of the shell that starts the backend
+```
+
+No API key or extra Python dependency is required. Replies route through the
+CLI, so they're a bit slower than a raw API call — fine for a local helper.
+Overrides (optional): `MOCKSIGNAL_COPILOT_MODEL` (default `opus`, e.g. set to
+`sonnet` for faster replies) and `MOCKSIGNAL_CLAUDE_BIN` (full path to `claude`
+if it isn't on the PATH). If the CLI is missing or not logged in, the copilot
+still loads and tells you how to fix it.
 
 ## Terminal
 

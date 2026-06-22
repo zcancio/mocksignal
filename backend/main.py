@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from . import problems
+from .copilot import CopilotBody, stream_reply
 from .runner import run_tests
 from .terminal import terminal_session
 
@@ -102,6 +104,16 @@ def read_file(name: str, filename: str):
 @app.post("/api/problems/{name}/run")
 def run(name: str):
     return run_tests(_problem_or_404(name))
+
+
+@app.post("/api/copilot")
+async def copilot(body: CopilotBody):
+    """Stream a copilot reply as Server-Sent Events."""
+    return StreamingResponse(
+        stream_reply(body),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.websocket("/api/problems/{name}/terminal")
