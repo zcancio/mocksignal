@@ -29,11 +29,15 @@ const THEME = {
 
 // A real PTY-backed terminal (xterm.js <-> backend WebSocket). The shell is
 // rooted in the problem directory, so `python -m pdb tests.py` just works.
-export default function Terminal({ problemName, active, resizeKey }) {
+export default function Terminal({ problemName, active, resizeKey, onOutput }) {
   const hostRef = useRef(null)
   const termRef = useRef(null)
   const fitRef = useRef(null)
   const wsRef = useRef(null)
+  // Keep the latest onOutput without re-running the connect effect (which would
+  // tear down and rebuild the PTY/WebSocket).
+  const onOutputRef = useRef(onOutput)
+  onOutputRef.current = onOutput
 
   useEffect(() => {
     if (!problemName) return undefined
@@ -79,7 +83,13 @@ export default function Terminal({ problemName, active, resizeKey }) {
       sendResize()
       term.focus()
     }
-    ws.onmessage = (e) => term.write(new Uint8Array(e.data))
+    const decoder = new TextDecoder()
+    ws.onmessage = (e) => {
+      const bytes = new Uint8Array(e.data)
+      term.write(bytes)
+      // Mirror the transcript up so the copilot can see terminal history.
+      onOutputRef.current?.(decoder.decode(bytes, { stream: true }))
+    }
     ws.onclose = () =>
       term.write('\r\n\x1b[2m[ terminal session ended ]\x1b[0m\r\n')
 

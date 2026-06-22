@@ -5,6 +5,7 @@ import { reachedLevel, computeScore } from './lib/grading'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import ProblemPanel from './components/ProblemPanel'
+import CopilotPanel from './components/CopilotPanel'
 import SectionPlaceholder from './components/SectionPlaceholder'
 import FilesPanel from './components/FilesPanel'
 import EditorPane from './components/EditorPane'
@@ -13,6 +14,30 @@ import BottomBar from './components/BottomBar'
 import ScoreModal from './components/ScoreModal'
 
 const SAVE_DEBOUNCE_MS = 800
+const TERMINAL_BUFFER_CHARS = 20000 // per-terminal scrollback we retain for the copilot
+
+// Strip ANSI escape sequences and carriage returns so the terminal transcript
+// reads cleanly when handed to the copilot.
+function stripAnsi(s) {
+  return s
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '') // OSC sequences
+    .replace(/\x1b[PX^_].*?\x1b\\/g, '') // other string sequences
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '') // CSI sequences
+    .replace(/\x1b[@-Z\\-_]/g, '') // lone escapes
+    .replace(/\r/g, '')
+}
+
+// Join the per-terminal transcripts into one labelled, cleaned blob.
+function combineTerminals(map) {
+  const parts = []
+  let i = 0
+  for (const [, txt] of map) {
+    i += 1
+    const clean = stripAnsi(txt).trim()
+    if (clean) parts.push(`--- Terminal ${i} ---\n${clean}`)
+  }
+  return parts.join('\n\n')
+}
 
 export default function App() {
   const [state, dispatch] = useSession()
@@ -34,6 +59,14 @@ export default function App() {
   const [activeFile, setActiveFile] = useState('solution.py')
   const [fileCache, setFileCache] = useState({})
 
+  // Copilot chat. Kept in App (not the panel) so history survives switching
+  // sidebar sections, and a streaming reply keeps updating if you switch away.
+  const [copilotMessages, setCopilotMessages] = useState([])
+  const [copilotSending, setCopilotSending] = useState(false)
+  const copilotAbort = useRef(null)
+  // Per-terminal transcripts (id -> recent text), captured for copilot context.
+  const terminalHistoryRef = useRef(new Map())
+
   const loadProblem = useCallback(
     async (name) => {
       dispatch({ type: 'LOAD_START' })
@@ -47,6 +80,7 @@ export default function App() {
       setFileCache({})
       setOpenFiles([{ name: 'solution.py', editable: true }])
       setActiveFile('solution.py')
+      terminalHistoryRef.current.clear() // terminals remount per problem
     },
     [dispatch],
   )
@@ -177,6 +211,104 @@ export default function App() {
     setActiveFile((a) => (a === name ? 'solution.py' : a))
   }, [])
 
+  // Latest state + chat, so the copilot send handler can stay stable while
+  // still reading the current problem / code / results at call time.
+  const stateRef = useRef(state)
+  stateRef.current = state
+  const copilotRef = useRef(copilotMessages)
+  copilotRef.current = copilotMessages
+  const openFilesRef = useRef(openFiles)
+  openFilesRef.current = openFiles
+  const fileCacheRef = useRef(fileCache)
+  fileCacheRef.current = fileCache
+
+  // Accumulate terminal output (bubbled up from each Terminal) for context.
+  const appendTerminalOutput = useCallback((id, chunk) => {
+    const m = terminalHistoryRef.current
+    let next = (m.get(id) || '') + chunk
+    if (next.length > TERMINAL_BUFFER_CHARS) {
+      next = next.slice(next.length - TERMINAL_BUFFER_CHARS)
+    }
+    m.set(id, next)
+  }, [])
+
+  const buildCopilotContext = useCallback(() => {
+    const s = stateRef.current
+    const level = s.problem?.levels?.find((l) => l.level === s.activeLevel)
+    // Every open editor tab with its live contents (solution.py from the live
+    // buffer; read-only files from the cache).
+    const openFilesCtx = openFilesRef.current.map((f) => ({
+      name: f.name,
+      content:
+        f.name === 'solution.py'
+          ? s.editorContent
+          : fileCacheRef.current[f.name] ?? '',
+    }))
+    const terminalHistory = combineTerminals(terminalHistoryRef.current)
+    return {
+      problemName: s.problemName,
+      problemTitle: s.problem?.title,
+      description: s.problem?.description,
+      activeLevel: s.activeLevel,
+      levelMarkdown: level?.markdown,
+      openFiles: openFilesCtx,
+      terminalHistory: terminalHistory || null,
+      lastResults: s.results ? JSON.stringify(s.results) : null,
+    }
+  }, [])
+
+  const sendCopilot = useCallback(
+    async (text) => {
+      const trimmed = text.trim()
+      if (!trimmed || copilotSending) return
+      const history = [
+        ...copilotRef.current,
+        { role: 'user', content: trimmed },
+      ]
+      setCopilotMessages([...history, { role: 'assistant', content: '' }])
+      setCopilotSending(true)
+      const controller = new AbortController()
+      copilotAbort.current = controller
+
+      const patchLast = (patch) =>
+        setCopilotMessages((m) => {
+          const next = m.slice()
+          const last = next[next.length - 1]
+          next[next.length - 1] = { ...last, ...patch(last) }
+          return next
+        })
+
+      try {
+        await api.copilot(
+          { messages: history, context: buildCopilotContext() },
+          {
+            signal: controller.signal,
+            onToken: (t) =>
+              patchLast((last) => ({ content: last.content + t })),
+            onError: (e) => patchLast(() => ({ error: e.message })),
+          },
+        )
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          patchLast(() => ({ error: String(e.message || e) }))
+        }
+      } finally {
+        setCopilotSending(false)
+        copilotAbort.current = null
+      }
+    },
+    [copilotSending, buildCopilotContext],
+  )
+
+  const cancelCopilot = useCallback(() => {
+    copilotAbort.current?.abort()
+  }, [])
+
+  const clearCopilot = useCallback(() => {
+    copilotAbort.current?.abort()
+    setCopilotMessages([])
+  }, [])
+
   // Generic drag-to-resize for the pane separators.
   const beginResize = (e, opts) => {
     e.preventDefault()
@@ -245,6 +377,15 @@ export default function App() {
                 dispatch({ type: 'SET_ACTIVE_LEVEL', level })
               }
             />
+          ) : activeSection === 'copilot' ? (
+            <CopilotPanel
+              messages={copilotMessages}
+              sending={copilotSending}
+              ready={!!state.problemName}
+              onSend={sendCopilot}
+              onCancel={cancelCopilot}
+              onClear={clearCopilot}
+            />
           ) : (
             <SectionPlaceholder section={activeSection} />
           )}
@@ -309,6 +450,7 @@ export default function App() {
               levelCount={state.problem?.levelCount ?? 0}
               onRun={runTests}
               resizeKey={bottomHeight}
+              onTerminalOutput={appendTerminalOutput}
             />
           </div>
         </div>

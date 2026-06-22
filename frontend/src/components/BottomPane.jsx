@@ -38,6 +38,7 @@ export default function BottomPane({
   levelCount,
   onRun,
   resizeKey,
+  onTerminalOutput,
 }) {
   const [tab, setTab] = useState('tests')
   const [terminals, setTerminals] = useState([{ id: 1 }])
@@ -142,6 +143,7 @@ export default function BottomPane({
               problemName={problemName}
               active={tab === t.id}
               resizeKey={resizeKey}
+              onOutput={(chunk) => onTerminalOutput?.(t.id, chunk)}
             />
           </div>
         ))}
